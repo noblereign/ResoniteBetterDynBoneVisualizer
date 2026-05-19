@@ -63,137 +63,118 @@ public class LessFlashyDebugVisuals : ResoniteMod {
 	}
 #endif
 
-	private static void GenerateDebugVisualIntern(DynamicBoneChain boneChain, IAssetProvider<Material> normalMat, IAssetProvider<Material> terminalMat, IAssetProvider<Material> lineMat, IAssetProvider<Material> grabbedMat) {
-		var validBones = new System.Collections.Generic.List<Slot>();
-		var radiusModifiers = new System.Collections.Generic.Dictionary<Slot, float>();
-		foreach (var bone in boneChain.Bones) {
-			if (bone.IsValid && bone.BoneSlot.Target != null) {
-				validBones.Add(bone.BoneSlot.Target);
-				radiusModifiers[bone.BoneSlot.Target] = bone.RadiusModifier.Value;
-			}
+	public static System.Runtime.CompilerServices.ConditionalWeakTable<DynamicBoneChain, ChainVisuals> visualCache = new();
+
+	public class ChainVisuals {
+		public WeakReference<Slot> RootSlot;
+		public IAssetProvider<Material> NormalMat;
+		public IAssetProvider<Material> TerminalMat;
+		public IAssetProvider<Material> LineMat;
+		public IAssetProvider<Material> GrabbedMat;
+		
+		public class PointLinePair {
+			public Slot PointSlot;
+			public MeshRenderer PointRenderer;
+			public Slot LineSlot;
+			public CylinderMesh LineMesh;
 		}
-
-		if (validBones.Count == 0) return;
-
-		validBones.Sort((a, b) => a.HierachyDepth.CompareTo(b.HierachyDepth));
-
-		int[] childCounts = new int[validBones.Count];
-		int[] parentIndices = new int[validBones.Count];
-		parentIndices[0] = -1;
-		for (int i = 1; i < validBones.Count; i++) {
-			parentIndices[i] = 0;
-			for (int n = i - 1; n >= 0; n--) {
-				if (validBones[i].IsChildOf(validBones[n])) {
-					childCounts[n]++;
-					parentIndices[i] = n;
-					break;
-				}
-			}
+		
+		public System.Collections.Generic.List<PointLinePair> Pairs = new();
+		
+		public ChainVisuals(Slot rootSlot, IAssetProvider<Material> normal, IAssetProvider<Material> terminal, IAssetProvider<Material> line, IAssetProvider<Material> grabbed) {
+			RootSlot = new WeakReference<Slot>(rootSlot);
+			NormalMat = normal;
+			TerminalMat = terminal;
+			LineMat = line;
+			GrabbedMat = grabbed;
 		}
-
-		var simNodes = new System.Collections.Generic.List<(Slot slot, bool isVirtual, int parentIndex)>();
-		for (int i = 0; i < validBones.Count; i++) {
-			simNodes.Add((validBones[i], false, parentIndices[i]));
-		}
-
-		bool simulateTerm = boneChain.SimulateTerminalBones.Value;
-		if (simulateTerm) {
-			int count = simNodes.Count;
-			for (int i = 0; i < count; i++) {
-				if (childCounts[i] == 0) {
-					simNodes.Add((validBones[i], true, i));
-				}
-			}
-		}
-
-		bool[] isIK = new bool[simNodes.Count];
-		int effectorIndex = boneChain.EffectorBoneIndex.Value;
-		if (effectorIndex >= 0 && effectorIndex < simNodes.Count) {
-			int curr = effectorIndex;
-			while (curr >= 0) {
-				isIK[curr] = true;
-				curr = simNodes[curr].parentIndex;
-			}
-		}
-
-		System.Collections.Generic.Dictionary<Slot, bool> boneGrabbed = new();
-		System.Collections.Generic.Dictionary<Slot, bool> virtualBoneGrabbed = new();
-		for (int i = 0; i < simNodes.Count; i++) {
-			if (simNodes[i].isVirtual) {
-				virtualBoneGrabbed[simNodes[i].slot] = isIK[i];
-			} else {
-				boneGrabbed[simNodes[i].slot] = isIK[i];
-			}
-		}
-
-		float rootScale = MathX.AvgComponent(validBones[0].GlobalScale);
-		float baseGlobalRadius = boneChain.BaseBoneRadius.Value * rootScale;
-
-		for (int i = 0; i < validBones.Count; i++) {
-			Slot boneSlot = validBones[i];
-			float globalRadius = baseGlobalRadius * radiusModifiers[boneSlot];
-			bool isTerminal = (childCounts[i] == 0);
-			bool isGrabbed = boneGrabbed.TryGetValue(boneSlot, out bool grabbed) && grabbed;
-
-			if (i > 0) {
-				Slot pointSlot = boneSlot.AddSlot("DebugBonePoint");
-				pointSlot.PersistentSelf = false;
-				pointSlot.Tag = "DYNBONE_DEBUG";
-				float localRadius = boneSlot.GlobalScaleToLocal(globalRadius);
-				pointSlot.AttachSphere(localRadius, isGrabbed ? grabbedMat : ((isTerminal && !simulateTerm) ? terminalMat : normalMat), collider: false);
-			}
-
-			int pIndex = parentIndices[i];
-			Slot parentSlot = pIndex >= 0 ? validBones[pIndex] : null;
-
-			if (parentSlot != null) {
-				float length;
-				float3 dir = parentSlot.GlobalPointToLocal(boneSlot.GlobalPosition).GetNormalized(out length);
-				Slot lineSlot = parentSlot.AddSlot("DebugBoneLine");
-				lineSlot.PersistentSelf = false;
-				lineSlot.Tag = "DYNBONE_DEBUG";
-				lineSlot.LocalRotation = floatQ.LookRotation(in dir) * floatQ.FromToRotation(float3.Forward, float3.Up);
-				lineSlot.LocalPosition = dir * length * 0.5f;
+		
+		public void Update(DynamicBoneChain chain) {
+			if (!RootSlot.TryGetTarget(out Slot root) || root == null || root.IsDestroyed) return;
+			
+			var data = chain._data;
+			if (data == null) return;
+			
+			while (Pairs.Count < data.Length) {
+				Slot point = root.AddSlot("DebugBonePoint");
+				point.PersistentSelf = false;
+				var sMesh = point.AttachComponent<SphereMesh>();
+				sMesh.Radius.Value = 1f;
+				var pRenderer = point.AttachComponent<MeshRenderer>();
+				pRenderer.Mesh.Target = sMesh;
+				pRenderer.Materials.Add().Target = NormalMat;
 				
-				// Match FrooxEngine's native Debug.Line thickness (1mm)
-				lineSlot.AttachCylinder(parentSlot.GlobalScaleToLocal(0.005f), length, lineMat, collider: false);
+				Slot line = root.AddSlot("DebugBoneLine");
+				line.PersistentSelf = false;
+				var lMesh = line.AttachComponent<CylinderMesh>();
+				lMesh.Radius.Value = 0.005f;
+				lMesh.Height.Value = 1f;
+				var lRenderer = line.AttachComponent<MeshRenderer>();
+				lRenderer.Mesh.Target = lMesh;
+				lRenderer.Materials.Add().Target = LineMat;
+				
+				Pairs.Add(new PointLinePair {
+					PointSlot = point,
+					PointRenderer = pRenderer,
+					LineSlot = line,
+					LineMesh = lMesh
+				});
 			}
-
-			if (isTerminal && simulateTerm) {
-				float3 offset = float3.Zero;
-				if (parentSlot != null) {
-					offset = boneSlot.GlobalPosition - parentSlot.GlobalPosition;
+			while (Pairs.Count > data.Length) {
+				var pair = Pairs[Pairs.Count - 1];
+				if (pair.PointSlot != null) pair.PointSlot.Destroy();
+				if (pair.LineSlot != null) pair.LineSlot.Destroy();
+				Pairs.RemoveAt(Pairs.Count - 1);
+			}
+			
+			Slot space = chain._space;
+			if (space == null) return;
+			
+			for (int i = 0; i < data.Length; i++) {
+				var p = Pairs[i];
+				var d = data[i];
+				
+				float3 globalPos = space.LocalPointToGlobal(in d.pos);
+				float globalRadius = space.LocalScaleToGlobal(d.radius);
+				
+				if (i > 0) {
+					if (p.PointSlot != null && !p.PointSlot.IsDestroyed) {
+						if (!p.PointSlot.ActiveSelf) p.PointSlot.ActiveSelf = true;
+						p.PointSlot.GlobalPosition = globalPos;
+						p.PointSlot.GlobalScale = new float3(globalRadius, globalRadius, globalRadius);
+						
+						var mat = d.isIK ? GrabbedMat : (d.childCount == 0 ? TerminalMat : NormalMat);
+						if (p.PointRenderer != null && p.PointRenderer.Materials.Count > 0 && p.PointRenderer.Materials[0] != mat) {
+							p.PointRenderer.Materials[0] = mat;
+						}
+					}
 				} else {
-					Slot walk = boneSlot;
-					while (MathX.Approximately(walk.LocalPosition.Magnitude, 0f) && !walk.IsRootSlot) {
-						walk = walk.Parent;
-					}
-					if (!walk.IsRootSlot) {
-						offset = walk.Parent.LocalVectorToGlobal(walk.LocalPosition);
-					} else {
-						offset = boneSlot.Forward;
-					}
+					if (p.PointSlot != null && !p.PointSlot.IsDestroyed && p.PointSlot.ActiveSelf) p.PointSlot.ActiveSelf = false;
 				}
-
-				float3 localOffset = boneSlot.GlobalVectorToLocal(offset);
-
-				Slot simPointSlot = boneSlot.AddSlot("DebugSimulatedBonePoint");
-				simPointSlot.PersistentSelf = false;
-				simPointSlot.Tag = "DYNBONE_DEBUG";
-				simPointSlot.LocalPosition = localOffset;
-				float simLocalRadius = boneSlot.GlobalScaleToLocal(globalRadius);
 				
-				bool isSimGrabbed = virtualBoneGrabbed.TryGetValue(boneSlot, out bool vGrabbed) && vGrabbed;
-				simPointSlot.AttachSphere(simLocalRadius, isSimGrabbed ? grabbedMat : terminalMat, collider: false);
-
-				float3 dir = localOffset.GetNormalized(out float length);
-				if (length > 0) {
-					Slot simLineSlot = boneSlot.AddSlot("DebugSimulatedBoneLine");
-					simLineSlot.PersistentSelf = false;
-					simLineSlot.Tag = "DYNBONE_DEBUG";
-					simLineSlot.LocalRotation = floatQ.LookRotation(in dir) * floatQ.FromToRotation(float3.Forward, float3.Up);
-					simLineSlot.LocalPosition = dir * length * 0.5f;
-					simLineSlot.AttachCylinder(boneSlot.GlobalScaleToLocal(0.005f), length, lineMat, collider: false);
+				if (d.parentIndex >= 0 && d.parentIndex < data.Length) {
+					if (p.LineSlot != null && !p.LineSlot.IsDestroyed) {
+						if (!p.LineSlot.ActiveSelf) p.LineSlot.ActiveSelf = true;
+						float3 parentPos = space.LocalPointToGlobal(in data[d.parentIndex].pos);
+						
+						float3 offset = globalPos - parentPos;
+						float length = offset.Magnitude;
+						
+						if (length > 0) {
+							float3 dir = offset / length;
+							p.LineSlot.GlobalPosition = parentPos + dir * length * 0.5f;
+							p.LineSlot.GlobalRotation = floatQ.LookRotation(in dir) * floatQ.FromToRotation(float3.Forward, float3.Up);
+						} else {
+							p.LineSlot.GlobalPosition = parentPos;
+						}
+						
+						p.LineSlot.GlobalScale = float3.One;
+						if (p.LineMesh != null && p.LineMesh.Height.Value != length) {
+							p.LineMesh.Height.Value = length;
+						}
+					}
+				} else {
+					if (p.LineSlot != null && !p.LineSlot.IsDestroyed && p.LineSlot.ActiveSelf) p.LineSlot.ActiveSelf = false;
 				}
 			}
 		}
@@ -201,8 +182,14 @@ public class LessFlashyDebugVisuals : ResoniteMod {
 
 
 	public static void GenerateDebugVisual(DynamicBoneChain boneChain) {
+		ClearDebugVisual(boneChain);
+
+		Slot debugRoot = boneChain.Slot.AddSlot("DYNBONE_DEBUG_ROOT");
+		debugRoot.PersistentSelf = false;
+		debugRoot.Tag = "DYNBONE_DEBUG";
+
 		OverlayFresnelMaterial GetMaterial(colorX color) {
-			OverlayFresnelMaterial overlayFresnelMaterial = boneChain.World.AssetsSlot.AddSlot("RigDebugMaterial_" + color.ToString()).AttachComponent<OverlayFresnelMaterial>();
+			OverlayFresnelMaterial overlayFresnelMaterial = debugRoot.AttachComponent<OverlayFresnelMaterial>();
 			overlayFresnelMaterial.Slot.PersistentSelf = false;
 			overlayFresnelMaterial.BlendMode.Value = BlendMode.Alpha;
 			overlayFresnelMaterial.FrontNearColor.Value = color * 0.5f;
@@ -216,19 +203,41 @@ public class LessFlashyDebugVisuals : ResoniteMod {
 		IAssetProvider<Material> lineMat = GetMaterial(colorX.Yellow);
 		IAssetProvider<Material> grabbedMat = GetMaterial(colorX.Magenta);
 
-		GenerateDebugVisualIntern(boneChain, normalMat, terminalMat, lineMat, grabbedMat);
+		var visuals = new ChainVisuals(debugRoot, normalMat, terminalMat, lineMat, grabbedMat);
+		visuals.Update(boneChain);
+		visualCache.AddOrUpdate(boneChain, visuals);
 	}
 
 	public static void ClearDebugVisual(DynamicBoneChain boneChain) {
-		foreach (var bone in boneChain.Bones) {
-			if (bone.BoneSlot.Target != null) {
-				foreach (Slot item in bone.BoneSlot.Target.GetChildrenWithTag("DYNBONE_DEBUG")) {
-					item.Destroy();
+		var toDestroy = new System.Collections.Generic.List<Slot>();
+
+		void FindTags(Slot s) {
+			if (s == null) return;
+			foreach (var child in s.Children) {
+				if (child.Tag == "DYNBONE_DEBUG") {
+					toDestroy.Add(child);
 				}
 			}
 		}
-		foreach (Slot item in boneChain.Slot.GetChildrenWithTag("DYNBONE_DEBUG")) {
-			item.Destroy();
+
+		FindTags(boneChain.Slot);
+		foreach (var bone in boneChain.Bones) {
+			if (bone != null && bone.IsValid && bone.BoneSlot.Target != null) {
+				FindTags(bone.BoneSlot.Target);
+			}
+		}
+
+		foreach (var s in toDestroy) {
+			if (s != null && !s.IsDestroyed) {
+				s.Destroy();
+			}
+		}
+
+		if (visualCache.TryGetValue(boneChain, out var vis)) {
+			if (vis.RootSlot.TryGetTarget(out Slot root) && root != null) {
+				root.Destroy();
+			}
+			visualCache.Remove(boneChain);
 		}
 	}
 
@@ -258,6 +267,15 @@ public class LessFlashyDebugVisuals : ResoniteMod {
 					ClearDebugVisual(__instance);
 				});
 			};
+		}
+	}
+
+	[HarmonyPatch(typeof(DynamicBoneChain), "FinishSimulation")]
+	class DynamicBoneChain_FinishSimulation_Patch {
+		public static void Postfix(DynamicBoneChain __instance) {
+			if (visualCache.TryGetValue(__instance, out var vis)) {
+				vis.Update(__instance);
+			}
 		}
 	}
 
