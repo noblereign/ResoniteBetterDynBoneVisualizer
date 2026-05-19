@@ -5,7 +5,8 @@
 		<LangVersion>14.0</LangVersion>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<!-- Change CopyToMods to true if you'd like builds to be moved into the Mods folder automatically-->
+		<!-- Change CopyToMods to true if you'd like builds to be moved into the Mods folder
+		automatically-->
 		<CopyToMods Condition="'$(CopyToMods)'==''">true</CopyToMods>
 	</PropertyGroup>
 
@@ -14,22 +15,22 @@
 		<ResonitePath>$(MSBuildThisFileDirectory)Resonite/</ResonitePath>
 		<ResonitePath Condition="Exists('C:\Program Files (x86)\Steam\steamapps\common\Resonite\')">C:\Program Files (x86)\Steam\steamapps\common\Resonite\</ResonitePath>
 		<ResonitePath Condition="Exists('$(HOME)/.steam/steam/steamapps/common/Resonite/')">$(HOME)/.steam/steam/steamapps/common/Resonite/</ResonitePath>
-    <ResonitePath Condition="Exists('P:\SteamLibrary\steamapps\common\Resonite\')">P:\SteamLibrary\steamapps\common\Resonite\</ResonitePath>
-  </PropertyGroup>
+		<ResonitePath Condition="Exists('P:\SteamLibrary\steamapps\common\Resonite\')">P:\SteamLibrary\steamapps\common\Resonite\</ResonitePath>
+	</PropertyGroup>
 
 	<ItemGroup>
-    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3"></PackageReference>
+		<PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3"></PackageReference>
 		<PackageReference Include="ResoniteModLoader" Version="5.0.1" />
 		<PackageReference Include="Lib.Harmony" Version="2.4.2" />
-    <Reference Include="Elements.Core">
-      <HintPath>$(ResonitePath)Elements.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="Renderite.Shared">
-      <HintPath>$(ResonitePath)Renderite.Shared.dll</HintPath>
-    </Reference>
-    <Reference Include="ResoniteHotReloadLib">
-      <HintPath>$(ResonitePath)rml_libs\ResoniteHotReloadLib.dll</HintPath>
-    </Reference>
+		<Reference Include="Elements.Core">
+			<HintPath>$(ResonitePath)Elements.Core.dll</HintPath>
+		</Reference>
+		<Reference Include="Renderite.Shared">
+			<HintPath>$(ResonitePath)Renderite.Shared.dll</HintPath>
+		</Reference>
+		<Reference Include="ResoniteHotReloadLib" Condition="'$(Configuration)' == 'Debug'">
+			<HintPath>$(ResonitePath)rml_libs\ResoniteHotReloadLib.dll</HintPath>
+		</Reference>
 		<Reference Include="FrooxEngine" Publicize="true">
 			<HintPath>$(ResonitePath)FrooxEngine.dll</HintPath>
 			<Private>False</Private>
@@ -40,11 +41,13 @@
 		<EmbeddedResource Include="Locale\*.json" />
 	</ItemGroup>
 
-  <PropertyGroup>
-    <PostBuildEvent Condition="Exists('P:\SteamLibrary\steamapps\common\Resonite\rml_mods\HotReloadMods\')">copy /Y "$(TargetDir)$(AssemblyName).dll" "P:\SteamLibrary\steamapps\common\Resonite\rml_mods\HotReloadMods\$(AssemblyName).dll</PostBuildEvent>
-  </PropertyGroup>
+	<PropertyGroup>
+		<PostBuildEvent Condition="'$(Configuration)' == 'Debug' And Exists('$(ResonitePath)rml_mods\HotReloadMods\')">
+      copy /Y "$(TargetDir)$(AssemblyName).dll" "$(ResonitePath)rml_mods\HotReloadMods\$(AssemblyName).dll"
+    </PostBuildEvent>
+	</PropertyGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(CopyToMods)'=='true'">
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(CopyToMods)'=='true'">
 		<Message Text="Attempting to copy $(TargetFileName) to $(ResonitePath)rml_mods" Importance="high" />
 		<Copy SourceFiles="$(TargetDir)$(TargetFileName)" DestinationFolder="$(ResonitePath)rml_mods" ContinueOnError="true" />
 	</Target>

@@ -8,16 +8,16 @@ using ResoniteModLoader;
 using ResoniteHotReloadLib;
 #endif
 
-namespace LessFlashyDebugVisuals;
+namespace BetterDynBoneVisualizer;
 //More info on creating mods can be found https://github.com/resonite-modding-group/ResoniteModLoader/wiki/Creating-Mods
-public class LessFlashyDebugVisuals : ResoniteMod {
+public class BetterDynBoneVisualizer : ResoniteMod {
 	internal const string VERSION_CONSTANT = "1.0.0"; //Changing the version here updates it in all locations needed
-	public override string Name => "LessFlashyDebugVisuals";
+	public override string Name => "BetterDynBoneVisualizer";
 	public override string Author => "Noble";
 	public override string Version => VERSION_CONSTANT;
-	public override string Link => "https://github.com/noblereign/ResoniteLessFlashyDebugVisuals/";
+	public override string Link => "https://github.com/noblereign/ResoniteBetterDynBoneVisualizer/";
 
-	const string harmonyId = "dog.glacier.LessFlashyDebugVisuals";
+	const string harmonyId = "dog.glacier.BetterDynBoneVisualizer";
 
 	public static ModConfiguration? Config;
 
@@ -25,9 +25,9 @@ public class LessFlashyDebugVisuals : ResoniteMod {
 	public static ModConfigurationKey<bool> Enabled = new("Enabled", "Enables the mod, pretty self-explanatory.", () => true);
 
 	public override void OnEngineInit() {
-#if DEBUG
+	#if DEBUG
 		HotReloader.RegisterForHotReload(this);
-#endif
+	#endif
 
 		Config = GetConfiguration()!;
 		Config!.Save(true);
@@ -41,7 +41,7 @@ public class LessFlashyDebugVisuals : ResoniteMod {
 		harmony.PatchAll();
 	}
 
-#if DEBUG
+	#if DEBUG
 	// This is the method that should be used to unload your mod
 	// This means removing patches, clearing memory that may be in use etc.
 	static void BeforeHotReload() {
@@ -61,7 +61,7 @@ public class LessFlashyDebugVisuals : ResoniteMod {
 		// Call setup method
 		Setup();
 	}
-#endif
+	#endif
 
 	public static System.Runtime.CompilerServices.ConditionalWeakTable<DynamicBoneChain, ChainVisuals> visualCache = new();
 
