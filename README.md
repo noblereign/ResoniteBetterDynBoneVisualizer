@@ -1,28 +1,15 @@
 # BetterDynBoneVisualizer
 
-A [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoader) mod for [Resonite](https://resonite.com/) that allows you to add more Grabbers to your avatar.
+A [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoader) mod for [Resonite](https://resonite.com/) that adds a less flashy dynamic bone visualizer.
+
+The modded visualizer acts more like the visualizer from Rig, FingerReferencePoseSource, etc... Instead of creating and destroying debug visuals every frame, it instead generates visuals once and reuses them every update for better visual stability.
 
 ## Usage
-To make a new grabber, follow these steps:
-1. Make a new slot for your grabber.
-2. Add a `DynamicVariableSpace` to the slot with the name `BetterDynBoneVisualizer`.
-3. Add a `DynamicValueVariable<bool>` to the slot, and set the `VariableName` to `Grabbing`.
-4. Add a `Grabber` to the slot.
-5. Set yourself as the `Grabber`'s `AutoUpdateUser`.
-Now the Grabber will attempt a grab once the variable is toggled on. It will release once it's toggled off.
+On the bottom of DynamicBoneChain components there will be a new section called "Better DynBone Debug Visuals".
 
-You can also add a `DynamicValueVariable<float>` to the slot with the `VariableName` set to `Radius`, allowing you to set the distance of the grabber in local scale. By default this is set to 0.02, which matches the default in the Grabber code.
+Click "Generate debug visuals" to start the modded visualizer. When you're done you can hit "Clear debug visuals" to stop it.
 
-> [!NOTE]
-> These modded grabbers don't support the following:
-> - Acting upon objects with the context menu (Save Held/Destroy)
-> - Transfer Grabbing (a.k.a. Grab Smuggling)
-> 
-> The grabbers DO generate undo steps, and can also grab dynamic bones.
-
-## Screenshots
-<img width="1280" height="720" alt="2026-03-17 07 18 45" src="https://github.com/user-attachments/assets/93fa5efb-dee4-4bcc-93f4-c0ca0a0b8067" />
-
+It should act and look mostly like the vanilla visualizer, just without all the glitchy movements
 
 ## Installation
 1. Install [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoader).
