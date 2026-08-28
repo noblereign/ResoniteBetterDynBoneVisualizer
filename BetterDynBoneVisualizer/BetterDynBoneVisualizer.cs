@@ -209,7 +209,7 @@ public class BetterDynBoneVisualizer : ResoniteMod {
 	}
 
 	public static void ClearDebugVisual(DynamicBoneChain boneChain) {
-		var toDestroy = new System.Collections.Generic.List<Slot>();
+		var toDestroy = new List<Slot>();
 
 		void FindTags(Slot s) {
 			if (s == null) return;
@@ -234,7 +234,7 @@ public class BetterDynBoneVisualizer : ResoniteMod {
 		}
 
 		if (visualCache.TryGetValue(boneChain, out var vis)) {
-			if (vis.RootSlot.TryGetTarget(out Slot root) && root != null) {
+			if (vis.RootSlot.TryGetTarget(out Slot? root) && root != null) {
 				root.Destroy();
 			}
 			visualCache.Remove(boneChain);
